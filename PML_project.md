@@ -227,14 +227,12 @@ Appendix
     corr_Plot <- cor(train_Data[, -length(names(train_Data))])
     corrplot(corr_Plot, method="color")
 
-![](Machine_Learning_Assignment_files/figure-markdown_strict/unnamed-chunk-14-1.png)
 
 ### Figure 2. Decision Tree
 
     tree_Model <- rpart(classe ~ ., data=train_Data, method="class")
     prp(tree_Model) 
 
-![](Machine_Learning_Assignment_files/figure-markdown_strict/unnamed-chunk-15-1.png)
 
 Reference
 ---------
