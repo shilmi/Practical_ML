@@ -1,0 +1,181 @@
+---
+title: "Practical Machine Learning Project - Coursera"
+author: "Philippe-C (22 May 2015)"
+output:
+  pdf_document: default
+  html_document:
+    fig_height: 9
+    fig_width: 9
+---
+
+## Synopsis  
+
+Human Activity Recognition (**HAR**) has emerged as a key research area in the last years. Through devices such as Jawbone Up, Nike FuelBand, and Fitbit, we can have access to a large amount of data about personal activity relatively inexpensively.
+
+In this project, we have used data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants to predict the manner in which they did the exercise of lifting barbell(correctly (refered as Class A) or incorrectly (other Classes: B, C, D and E)). We were able to build a predictive algorithm with more than 99% of accuracy and less than 1% of estimated out-of-sample errors.
+
+The comptutations were conducted on Rstudio 0.98.1091 with Knitr on Mac OS Mavericks 10.9.5. Our methodology, performance metrics and prediction results are presented below.
+
+## R packages
+
+Our R code uses the following packages:
+
+```{r}
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(randomForest)
+library(corrplot)
+```
+
+Please note that the packages must have been installed previously (if not it can be easily done through the "install.packages("name of the package")" function)
+
+## Data source
+
+More information regarding the data set is given at the web page mentioned below (see also the  reference following the appendix):
+
+ http://groupware.les.inf.puc-rio.br/har 
+ 
+ (see the section on the Weight Lifting Exercise Dataset)
+
+Let's download the data:
+```{r}
+train_Url <-"https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+test_Url <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+train_File <- "./data/pml-training.csv"
+test_File  <- "./data/pml-testing.csv"
+if (!file.exists("./data")) {
+  dir.create("./data")
+}
+if (!file.exists(train_File)) {
+  download.file(train_Url, destfile=train_File, method="curl")
+}
+if (!file.exists(test_File)) {
+  download.file(test_Url, destfile=test_File, method="curl")
+}
+```
+
+## Reading and cleaning the Data
+We can now read the two csv files into two data frames.  
+Let's have a first look at the raw data:
+
+```{r}
+train_Raw <- read.csv("./data/pml-training.csv")
+test_Raw <- read.csv("./data/pml-testing.csv")
+dim(train_Raw)
+```
+
+```{r}
+dim(test_Raw)
+```
+
+The training data set is based on 19622 observations of 160 variables, while the testing data set contains 20 observations and 160 variables. 
+
+**The outcome to predict is the "classe" variable in the training set**. 
+
+### From raw data to a tidy data set
+
+The first step is to get rid of observations with missing values as well as some meaningless variables.
+
+```{r}
+sum(complete.cases(train_Raw))
+```
+
+The code below allows to remove columns that contain NA (missing values).
+
+```{r}
+train_Raw <- train_Raw[, colSums(is.na(train_Raw)) == 0] 
+test_Raw <- test_Raw[, colSums(is.na(test_Raw)) == 0] 
+```
+
+Then, we get rid of some columns that do not contribute much to the accelerometer measurements.
+
+```{r}
+classe <- train_Raw$classe
+train_Remove <- grepl("^X|timestamp|window", names(train_Raw))
+train_Raw <- train_Raw[, !train_Remove]
+train_Cleaned <- train_Raw[, sapply(train_Raw, is.numeric)]
+train_Cleaned$classe <- classe
+test_Remove <- grepl("^X|timestamp|window", names(test_Raw))
+test_Raw <- test_Raw[, !test_Remove]
+test_Cleaned <- test_Raw[, sapply(test_Raw, is.numeric)]
+```
+
+Now, the cleaned training data set contains 19622 observations and 53 variables, while the testing data set contains 20 observations and 53 variables. The "classe" variable is still in the cleaned training set.
+
+### Training and testing data set
+
+We have sliced the data into **a pure training data set (70%) and a validation data set (30%)**. We have also used the validation data set to conduct cross validation.
+
+Please note that we set the seed for reproducibility.
+
+```{r}
+set.seed(10000) 
+inTrain <- createDataPartition(train_Cleaned$classe, p=0.70, list=F)
+train_Data <- train_Cleaned[inTrain, ]
+test_Data <- train_Cleaned[-inTrain, ]
+```
+
+## The predictive model
+
+Our analysis uses a **Random Forest** (rf) algorithm which selects important variables and is also robust to correlated covariates & outliers. The correlation matrix can be observed in appendix (figure 1).
+
+In addition, we have used a **5-fold cross validation** (cv).  
+
+```{r}
+control_rf <- trainControl(method="cv", 5)
+model_rf <- train(classe ~ ., data=train_Data, method="rf", trControl=control_rf, ntree=150)
+model_rf
+```
+
+## Performance metrics
+
+We have estimated the performance of the model on the **validation data set**.  
+
+```{r}
+predict_rf <- predict(model_rf, test_Data)
+confusionMatrix(test_Data$classe, predict_rf)
+```
+
+```{r}
+accuracy <- postResample(predict_rf, test_Data$classe)
+accuracy
+```
+```{r}
+outsample_errors <- 1 - as.numeric(confusionMatrix(test_Data$classe, predict_rf)$overall[1])
+outsample_errors
+```
+
+We see that the estimated accuracy of the model is 99.4% and the estimated out-of-sample error is 0.6%.
+
+## Prediction results
+The final steps consits in applying the model to the original testing data set after removing the "problem_id" column. 
+
+The results are easy to read in the **decison tree figure** (Appendix 2)
+
+```{r}
+result <- predict(model_rf, test_Cleaned[, -length(names(test_Cleaned))])
+result
+```
+
+## Appendix
+
+### Figure 1. Correlation Matrix   
+
+```{r}
+corr_Plot <- cor(train_Data[, -length(names(train_Data))])
+corrplot(corr_Plot, method="color")
+```
+
+### Figure 2. Decision Tree 
+
+```{r}
+tree_Model <- rpart(classe ~ ., data=train_Data, method="class")
+prp(tree_Model) 
+```
+
+## Reference
+
+Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013.
+
+
